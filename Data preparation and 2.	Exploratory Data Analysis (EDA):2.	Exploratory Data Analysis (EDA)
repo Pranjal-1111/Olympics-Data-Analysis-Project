@@ -1,0 +1,245 @@
+
+
+'''
+
+TO RUN IN PROGRAM AND OBTAIN VISUALZATIONS
+STEP 1 DOWNLOAD THE FILE FROM DATA SET FOLDER
+STEP 2 CHANGE THE df PATH TO YOUR FILE LOCATION
+STEP 3 RUN THE CODE (COLAB,JUPYTER NOTEBOOK OR ANY OTHER ENVIROMENT)
+
+'''
+
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from prophet import Prophet
+
+def main():
+    print("Welcome to My Project!\nOLYMPIC ANALYSIS")
+
+    # ✅ Load the dataset
+    df = pd.read_csv("/Summer-Olympic-medals-1976-to-2008.csv",encoding='latin1')
+
+
+    # ✅ Data Cleaning
+    df = df.drop(columns=["Country_Code", "Event_gender"], errors="ignore")
+    df["Year"] = df["Year"].astype("Int64")
+    df = df.dropna().drop_duplicates()
+
+    # ✅ Display dataset info
+    print("\n✅ Cleaned Dataset Information:")
+    print(df.info())
+
+    # ✅ Basic Statistics
+    print("\n🔹 Dataset Overview:")
+    print(df.describe(include="all"))
+
+    # ✅ Unique Value Counts
+    print("\n🔹 Unique Cities:", df["City"].nunique())
+    print("🔹 Unique Sports:", df["Sport"].nunique())
+    print("🔹 Unique Disciplines:", df["Discipline"].nunique())
+    print("🔹 Unique Events:", df["Event"].nunique())
+    print("🔹 Unique Athletes:", df["Athlete"].nunique())
+    print("🔹 Unique Countries:", df["Country"].nunique())
+
+    # ✅ Medal & Gender Distribution
+    medal_counts = df["Medal"].value_counts()
+    gender_counts = df["Gender"].value_counts()
+
+    print("\n🔹 Medal Distribution:\n", medal_counts)
+    print("\n🔹 Gender Distribution:\n", gender_counts)
+
+    # ✅ Visualization: Medal Distribution
+    plt.figure(figsize=(6,4))
+    sns.barplot(x=medal_counts.index, y=medal_counts.values, palette="coolwarm")
+    plt.title("Medal Distribution")
+    plt.xlabel("Medal Type")
+    plt.ylabel("Count")
+    plt.show()
+
+    # ✅ Visualization: Gender Distribution
+    plt.figure(figsize=(6,4))
+    sns.barplot(x=gender_counts.index, y=gender_counts.values, palette="pastel")
+    plt.title("Gender Distribution of Athletes")
+    plt.xlabel("Gender")
+    plt.ylabel("Count")
+    plt.show()
+
+    # ✅ Number of Olympic Events Per Year
+    plt.figure(figsize=(12,5))
+    sns.countplot(data=df, x="Year", hue="Year", palette="viridis", legend=False)
+    plt.title("Number of Olympic Events Per Year")
+    plt.xticks(rotation=45)
+    plt.show()
+
+    # Most Successful Countries (Top 10)
+    top_countries = df["Country"].value_counts().head(10)
+    plt.figure(figsize=(10,5))
+    sns.barplot(x=top_countries.index, y=top_countries.values, hue=top_countries.index, palette="rocket", legend=False)
+    plt.title("Top 10 Countries with Most Medals")
+    plt.xlabel("Country")
+    plt.ylabel("Medal Count")
+    plt.xticks(rotation=45)
+    plt.show()
+
+
+    # ✅ Time-Series Forecasting with Prophet
+    medal_trends = df.groupby("Year")["Medal"].count().reset_index()
+    medal_trends.columns = ["ds", "y"]
+
+    model = Prophet()
+    model.fit(medal_trends)
+
+    future = model.make_future_dataframe(periods=4, freq="4YE")
+    forecast = model.predict(future)
+
+    fig = model.plot(forecast)
+    plt.title("Forecasted Olympic Medal Trends")
+    plt.xlabel("Year")
+    plt.ylabel("Total Medals")
+    plt.show()
+
+
+    # ✅ Step 1: Identify Unique Host Cities and Their Countries
+    host_countries = df.groupby("Year")["City"].first().reset_index()
+    host_countries = host_countries.merge(df[["Year", "City", "Country"]].drop_duplicates(), on=["Year", "City"])
+
+    # ✅ Step 2: Count Medals for Host Countries in Hosting Years
+    host_medals = df.groupby(["Year", "Country"])["Medal"].count().reset_index()
+    host_medals.rename(columns={"Medal": "Medal_Count"}, inplace=True)
+
+    # ✅ Step 3: Filter Only Host Countries
+    host_medals = host_medals[host_medals["Country"].isin(host_countries["Country"])]
+
+    # ✅ Step 4: Visualize Medal Boost for Host Countries
+    plt.figure(figsize=(12,6))
+    sns.lineplot(data=host_medals, x="Year", y="Medal_Count", hue="Country", marker="o")
+    plt.title("Medal Count of Host Countries Over the Years")
+    plt.xlabel("Year")
+    plt.ylabel("Total Medals Won")
+    plt.legend(title="Host Country", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.show()
+    
+
+    # ✅ Step 1: Identify Athletes Who Competed in Multiple Olympics
+    repeat_athletes = df.groupby("Athlete")["Year"].nunique().reset_index()
+    repeat_athletes = repeat_athletes[repeat_athletes["Year"] > 1]  # Athletes who competed multiple times
+
+    # ✅ Step 2: Count Medals for Repeat Athletes Over the Years
+    athlete_medals = df[df["Athlete"].isin(repeat_athletes["Athlete"])]
+    athlete_medals = athlete_medals.groupby(["Year", "Athlete"])["Medal"].count().reset_index()
+
+    # ✅ Step 3: Identify Top 10 Most Frequent Medalists
+    top_athletes = athlete_medals.groupby("Athlete")["Medal"].sum().sort_values(ascending=False).head(10).index
+    top_athlete_medals = athlete_medals[athlete_medals["Athlete"].isin(top_athletes)]
+
+    # ✅ Step 4: Visualize Career Progression of Top Repeat Winners
+    plt.figure(figsize=(12,6))
+    sns.lineplot(data=top_athlete_medals, x="Year", y="Medal", hue="Athlete", marker="o")
+    plt.title("Career Progression of Top 10 Repeat Medalists")
+    plt.xlabel("Olympic Year")
+    plt.ylabel("Total Medals Won")
+    plt.legend(title="Athlete", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.show()
+
+
+   
+    # ✅ Convert "Year" to datetime
+    df["Year"] = pd.to_datetime(df["Year"], format="%Y")
+
+    # ✅ Aggregate Medals per Year
+    medal_trends = df.groupby("Year")["Medal"].count().reset_index()
+    medal_trends.columns = ["ds", "y"]  # Prophet requires 'ds' (date) and 'y' (values)
+
+    # ✅ Train Prophet Model
+    model = Prophet()
+    model.fit(medal_trends)
+
+    # ✅ Calculate the Correct Number of Future Olympic Years (2028 to 2040)
+    last_year = medal_trends["ds"].max().year  # Get the last recorded year
+    future_years = list(range(last_year + 4, 2041, 4))  # Olympic years: Every 4 years
+    future = pd.DataFrame({"ds": pd.to_datetime(future_years, format="%Y")})  # Convert to datetime
+
+    # ✅ Make Predictions
+    forecast = model.predict(future)
+
+    # ✅ Plot Forecast
+    fig = model.plot(forecast)  
+    plt.title("Forecasted Olympic Medal Trends (2028, 2032, 2036, 2040)")
+    plt.xlabel("Year")
+    plt.ylabel("Total Medals")
+    plt.show()
+
+    print(forecast[["ds", "yhat"]].tail(10))
+
+
+    # ✅ Load the Dataset (Using the Correct Path)
+    df = pd.read_csv("/Summer-Olympic-medals-1976-to-2008.csv", encoding="latin1")
+
+    # ✅ Step 1: Count Male vs. Female Participation Per Year
+    gender_trends = df.groupby(["Year", "Gender"])["Athlete"].count().reset_index()
+    gender_trends.columns = ["Year", "Gender", "Count"]
+
+    # ✅ Step 2: Pivot Table for Easier Visualization
+    gender_pivot = gender_trends.pivot(index="Year", columns="Gender", values="Count")
+    gender_pivot = gender_pivot.fillna(0)  # Fill missing values if any
+
+    # ✅ Step 3: Calculate Percentage of Female Participation
+    gender_pivot["Total"] = gender_pivot.sum(axis=1)
+    gender_pivot["Female_Percentage"] = (gender_pivot["Women"] / gender_pivot["Total"]) * 100
+
+    # ✅ Step 4: Visualize Gender Participation Trends
+    plt.figure(figsize=(12,6))
+    sns.lineplot(data=gender_pivot[["Men", "Women"]])
+    plt.title("Male vs Female Participation Over the Years")
+    plt.xlabel("Year")
+    plt.ylabel("Number of Athletes")
+    plt.legend(["Men", "Women"])
+    plt.grid(True)
+    plt.show()
+
+    # ✅ Step 5: Plot Female Percentage Over Time
+    plt.figure(figsize=(12,6))
+    sns.lineplot(x=gender_pivot.index, y=gender_pivot["Female_Percentage"], marker="o", color="purple")
+    plt.title("Female Participation Percentage Over the Years")
+    plt.xlabel("Year")
+    plt.ylabel("Percentage (%)")
+    plt.grid(True)
+    plt.show()
+
+    # ✅ Load the Dataset (Using the Correct Path)
+    df = pd.read_csv("/Summer-Olympic-medals-1976-to-2008.csv", encoding="latin1")
+
+    # ✅ Step 1: Count Total Medals Per Country in Each Sport
+    sport_country_medals = df.groupby(["Sport", "Country"])["Medal"].count().reset_index()
+
+    # ✅ Step 2: Find the Top 10 Countries in Each Sport
+    top_countries_per_sport = sport_country_medals.groupby("Sport").apply(lambda x: x.nlargest(3, "Medal"))
+
+    # ✅ Step 3: Pivot Table for Heatmap
+    heatmap_data = sport_country_medals.pivot(index="Sport", columns="Country", values="Medal").fillna(0)
+
+    # ✅ Step 4: Plot Heatmap of Sport-Specific Country Dominance
+    plt.figure(figsize=(12,8))
+    sns.heatmap(heatmap_data, cmap="coolwarm", linewidths=0.5)
+    plt.title("Sport-Specific Country Dominance (Total Medals)")
+    plt.xlabel("Country")
+    plt.ylabel("Sport")
+    plt.xticks(rotation=90)
+    plt.show()
+
+    # ✅ Step 5: Plot Bar Chart of Top Countries in Popular Sports
+    plt.figure(figsize=(12,6))
+    sns.barplot(data=top_countries_per_sport, x="Country", y="Medal", hue="Sport")
+    plt.title("Top Countries in Popular Olympic Sports")
+    plt.xlabel("Country")
+    plt.ylabel("Total Medals")
+    plt.xticks(rotation=45)
+    plt.legend(title="Sport", bbox_to_anchor=(1.05, 1), loc="upper left")
+    plt.show()
+
+
+
+if __name__ == "__main__":
+    main()
